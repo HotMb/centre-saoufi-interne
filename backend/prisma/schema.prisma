@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SECRETAIRE
+  PRATICIEN
+  PATIENT
+}
+
+enum AppointmentStatus {
+  PLANIFIE
+  ANNULE
+  REPORTE
+  REALISE
+}
+
+enum StatutSuivi {
+  EN_COURS
+  EN_PAUSE
+  TERMINE
+  INTERROMPU
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  username      String   @unique
+  password_hash String
+  role          UserRole @default(SECRETAIRE)
+  enabled       Boolean  @default(true)
+
+  // Relations
+  appointments  Appointment[]
+  sessions      Session[]
+  patientNotes  PatientNote[]  @relation("NoteAuthor")
+  sessionNotes  SessionNote[]  @relation("SessionNoteAuthor")
+  suivis        SuiviPatient[] @relation("SuiviPraticien")
+  suiviNotes    SuiviNote[]    @relation("SuiviNoteAuthor")
+  logs          ActivityLog[]
+
+  patientId     String?  @unique
+  patient       Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Patient {
+  id           String   @id @default(uuid())
+  name         String
+  firstName    String
+  phone        String
+  birthDate    DateTime
+
+  // Relations
+  appointments Appointment[]
+  sessions     Session[]
+  notes        PatientNote[]
+  suivis       SuiviPatient[]
+  user         User?
+
+  email           String?   @unique
+  address         String?
+  medecinTraitant String?
+  pathologie      String?
+  deletedAt       DateTime? // Soft delete — null = actif
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([deletedAt])
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String?
+  patient         Patient?          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientName     String?
+  dateTime        DateTime
+  durationMinutes Int               @default(30)
+  service         String
+  status          AppointmentStatus @default(PLANIFIE)
+  practitionerId  String?
+  practitioner    User?             @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([dateTime])
+  @@index([patientId])
+  @@index([practitionerId])
+  @@index([status])
+}
+
+model Session {
+  id             String   @id @default(uuid())
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dateTime       DateTime
+  service        String
+  notes          String
+  practitionerId String
+  practitioner   User     @relation(fields: [practitionerId], references: [id])
+
+  sessionNotes   SessionNote[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([dateTime])
+  @@index([patientId])
+  @@index([practitionerId])
+}
+
+model PatientNote {
+  id        String   @id @default(uuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("NoteAuthor", fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model SessionNote {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("SessionNoteAuthor", fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Suivi patient — protocole de rééducation par pathologie
+// ─────────────────────────────────────────────────────────────
+
+model SuiviPatient {
+  id             String      @id @default(uuid())
+  patientId      String
+  patient        Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practitionerId String
+  practitioner   User        @relation("SuiviPraticien", fields: [practitionerId], references: [id])
+
+  pathologie     String      // Condition traitée (ex : lombalgie, fracture épaule)
+  objectifs      String?     // Objectifs thérapeutiques
+  seancesPrevues Int         // Nombre de séances du protocole
+  dateDebut      DateTime    @default(now())
+  dateFin        DateTime?   // Date de fin prévue
+  statut         StatutSuivi @default(EN_COURS)
+
+  notes          SuiviNote[]
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([patientId])
+  @@index([practitionerId])
+  @@index([statut])
+}
+
+model SuiviNote {
+  id        String       @id @default(uuid())
+  suiviId   String
+  suivi     SuiviPatient @relation(fields: [suiviId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User         @relation("SuiviNoteAuthor", fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime     @default(now())
+
+  @@index([suiviId])
+}
