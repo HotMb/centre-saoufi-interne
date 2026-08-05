@@ -12,6 +12,7 @@ const SessionsTab      = lazy(() => import('./tabs/SessionsTab').then(m => ({ de
 const DevisTab         = lazy(() => import('./tabs/DevisTab').then(m => ({ default: m.DevisTab })));
 const AdminSettingsTab = lazy(() => import('./tabs/AdminSettingsTab').then(m => ({ default: m.AdminSettingsTab })));
 const PatientPortalTab = lazy(() => import('./tabs/PatientPortalTab').then(m => ({ default: m.PatientPortalTab })));
+const SuiviTab         = lazy(() => import('./tabs/SuiviTab').then(m => ({ default: m.SuiviTab })));
 
 function TabLoader() {
   return (
@@ -102,6 +103,7 @@ export default function App() {
           {activeTab === 'patients'     && <PatientsTab currentUser={currentUser} />}
           {activeTab === 'appointments' && <AppointmentsTab currentUser={currentUser} />}
           {activeTab === 'sessions'     && <SessionsTab currentUser={currentUser} />}
+          {activeTab === 'suivis'       && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETAIRE' || currentUser.role === 'PRATICIEN') && <SuiviTab currentUser={currentUser} />}
           {activeTab === 'devis'        && (currentUser.role === 'ADMIN' || currentUser.role === 'SECRETAIRE') && <DevisTab />}
           {activeTab === 'admin'        && currentUser.role === 'ADMIN' && <AdminSettingsTab currentUser={currentUser} />}
         </Suspense>

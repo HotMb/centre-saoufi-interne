@@ -1,6 +1,6 @@
 import {
   HeartPulse, LayoutDashboard, Users, Calendar,
-  ClipboardList, FileText, Shield, Moon, Sun, LogOut, X,
+  ClipboardList, FileText, Shield, Moon, Sun, LogOut, X, Activity,
 } from 'lucide-react';
 import { User } from '../types';
 import { ROLE_COLORS } from '../constants';
@@ -21,6 +21,7 @@ const TABS = [
   { id: 'patients',     label: 'Patients',         icon: <Users size={19} />,           roles: ['ADMIN', 'SECRETAIRE', 'PRATICIEN'] },
   { id: 'appointments', label: 'Rendez-vous',      icon: <Calendar size={19} />,        roles: ['ADMIN', 'SECRETAIRE', 'PRATICIEN'] },
   { id: 'sessions',     label: 'Séances',          icon: <ClipboardList size={19} />,   roles: ['ADMIN', 'SECRETAIRE', 'PRATICIEN'] },
+  { id: 'suivis',       label: 'Suivis',           icon: <Activity size={19} />,        roles: ['ADMIN', 'SECRETAIRE', 'PRATICIEN'] },
   { id: 'devis',        label: 'Devis',            icon: <FileText size={19} />,        roles: ['ADMIN', 'SECRETAIRE'] },
   { id: 'admin',        label: 'Administration',   icon: <Shield size={19} />,          roles: ['ADMIN'] },
 ];
