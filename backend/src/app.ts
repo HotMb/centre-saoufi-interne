@@ -18,6 +18,9 @@ import { startReminderCron } from './services/reminder.service';
 const app = express();
 const isProd = env.NODE_ENV === 'production';
 
+// Railway / Render terminent le TLS au niveau du proxy — obligatoire pour les cookies secure
+if (isProd) app.set('trust proxy', 1);
+
 // CORS — uniquement nécessaire en développement (en prod, même origine)
 if (!isProd) {
   app.use(
