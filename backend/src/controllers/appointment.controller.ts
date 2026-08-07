@@ -17,10 +17,13 @@ const STATUTS_VALIDES = ['PLANIFIE', 'ANNULE', 'REPORTE', 'REALISE'];
 
 // Fonction de validation des horaires
 function isWithinOpeningHours(date: Date): { valid: boolean; reason?: string } {
-  const day = date.getDay(); // 0 = Dimanche, 1 = Lundi, ..., 6 = Samedi
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const time = hours + minutes / 60; // Ex: 9h30 -> 9.5
+  // Les timestamps sont stockés en UTC par Prisma.
+  // Africa/Casablanca = UTC+1 permanent depuis le 28 octobre 2018 (pas de DST).
+  const casablanca = new Date(date.getTime() + 60 * 60 * 1000);
+  const day = casablanca.getUTCDay();     // 0 = Dimanche, ..., 6 = Samedi
+  const hours = casablanca.getUTCHours();
+  const minutes = casablanca.getUTCMinutes();
+  const time = hours + minutes / 60;      // Ex: 9h30 -> 9.5
 
   if (day === 0) {
     return { valid: false, reason: "Le centre est fermé le dimanche." };
@@ -28,7 +31,7 @@ function isWithinOpeningHours(date: Date): { valid: boolean; reason?: string } {
 
   if (day >= 1 && day <= 5) {
     // Lundi - Vendredi: 09:30-13:30 et 15:30-19:30
-    // Limitation 1h avant fermeture => matin max 12:30, aprem max 18:30
+    // Dernier créneau 1h avant fermeture => matin max 12:30, aprem max 18:30
     const isMatin = time >= 9.5 && time <= 12.5;
     const isAprem = time >= 15.5 && time <= 18.5;
     if (!isMatin && !isAprem) {
@@ -37,8 +40,7 @@ function isWithinOpeningHours(date: Date): { valid: boolean; reason?: string } {
   }
 
   if (day === 6) {
-    // Samedi: 09:00-15:00
-    // Limitation 1h avant fermeture => max 14:00
+    // Samedi: 09:00-15:00 — dernier créneau 1h avant => max 14:00
     if (time < 9.0 || time > 14.0) {
       return { valid: false, reason: "Horaires le samedi : 09:00-14:00 (dernier créneau 1h avant la fermeture)." };
     }
@@ -209,33 +211,36 @@ export async function createAppointment(req: Request, res: Response) {
       }
     }
 
-    // Vérifier la disponibilité du praticien (chevauchement avec les durées)
-    if (practitionerId) {
+    // Vérifier l'absence de chevauchement de créneau
+    {
       const duration = durationMinutes ? parseInt(durationMinutes, 10) : 30;
       const startMs = rdvDate.getTime();
       const endMs = startMs + duration * 60 * 1000;
 
-      const startOfDay = new Date(rdvDate); startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(rdvDate); endOfDay.setHours(23, 59, 59, 999);
+      const startOfDay = new Date(rdvDate); startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(rdvDate); endOfDay.setUTCHours(23, 59, 59, 999);
 
-      const dailyAppointments = await prisma.appointment.findMany({
+      // Si un praticien est assigné : vérifier ses RDV. Sinon : vérifier tous les RDV du jour.
+      const dayAppointments = await prisma.appointment.findMany({
         where: {
-          practitionerId,
           status: { in: ['PLANIFIE', 'REPORTE'] },
           dateTime: { gte: startOfDay, lte: endOfDay },
+          ...(practitionerId ? { practitionerId } : {}),
         },
       });
 
-      const conflict = dailyAppointments.find(a => {
+      const conflict = dayAppointments.find(a => {
         const aStart = a.dateTime.getTime();
         const aEnd = aStart + (a.durationMinutes || 30) * 60 * 1000;
-        // Un créneau chevauche si (début < finAutre) ET (fin > débutAutre)
         return startMs < aEnd && endMs > aStart;
       });
 
       if (conflict) {
+        const conflictTime = new Date(conflict.dateTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         return res.status(409).json({
-          error: `Conflit de créneau : ce praticien a déjà un rendez-vous à ${new Date(conflict.dateTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
+          error: practitionerId
+            ? `Conflit de créneau : ce praticien a déjà un rendez-vous à ${conflictTime}.`
+            : `Ce créneau est déjà occupé (rendez-vous existant à ${conflictTime}).`,
         });
       }
     }
@@ -392,11 +397,13 @@ export async function createBulkAppointments(req: Request, res: Response) {
       }
     }
 
-    // Valider toutes les dates avant de créer quoi que ce soit
-    for (const dateTime of dates) {
-      const appt_date = new Date(dateTime);
+    const duration = durationMinutes ? parseInt(durationMinutes, 10) : 30;
+    const apptDates = dates.map((dt: string) => new Date(dt));
+
+    // 1. Valider chaque date (format, passé, horaires)
+    for (const appt_date of apptDates) {
       if (isNaN(appt_date.getTime())) {
-        return res.status(400).json({ error: `Format de date invalide : ${dateTime}` });
+        return res.status(400).json({ error: `Format de date invalide.` });
       }
       if (appt_date.getTime() < Date.now() - 5 * 60 * 1000) {
         return res.status(400).json({ error: 'Impossible de créer un rendez-vous dans le passé.' });
@@ -404,23 +411,69 @@ export async function createBulkAppointments(req: Request, res: Response) {
       const hoursCheck = isWithinOpeningHours(appt_date);
       if (!hoursCheck.valid) {
         return res.status(400).json({
-          error: `Créneau hors horaires (${appt_date.toLocaleString('fr-FR')}) : ${hoursCheck.reason}`,
+          error: `Créneau hors horaires (${appt_date.toLocaleString('fr-FR', { timeZone: 'Africa/Casablanca' })}) : ${hoursCheck.reason}`,
+        });
+      }
+    }
+
+    // 2. Vérifier les doublons dans la liste elle-même
+    for (let i = 0; i < apptDates.length; i++) {
+      for (let j = i + 1; j < apptDates.length; j++) {
+        const iStart = apptDates[i].getTime();
+        const iEnd = iStart + duration * 60 * 1000;
+        const jStart = apptDates[j].getTime();
+        const jEnd = jStart + duration * 60 * 1000;
+        if (iStart < jEnd && iEnd > jStart) {
+          return res.status(409).json({
+            error: `Deux séances du devis se chevauchent. Vérifiez les dates et heures saisies.`,
+          });
+        }
+      }
+    }
+
+    // 3. Vérifier les conflits avec les RDV existants
+    for (const appt_date of apptDates) {
+      const startMs = appt_date.getTime();
+      const endMs = startMs + duration * 60 * 1000;
+      const startOfDay = new Date(appt_date); startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(appt_date); endOfDay.setUTCHours(23, 59, 59, 999);
+
+      const dayAppts = await prisma.appointment.findMany({
+        where: {
+          status: { in: ['PLANIFIE', 'REPORTE'] },
+          dateTime: { gte: startOfDay, lte: endOfDay },
+          ...(practitionerId ? { practitionerId } : {}),
+        },
+      });
+
+      const conflict = dayAppts.find((a: any) => {
+        const aStart = a.dateTime.getTime();
+        const aEnd = aStart + (a.durationMinutes || 30) * 60 * 1000;
+        return startMs < aEnd && endMs > aStart;
+      });
+
+      if (conflict) {
+        const ct = (conflict as any).dateTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        return res.status(409).json({
+          error: practitionerId
+            ? `Conflit : ce praticien a déjà un rendez-vous à ${ct}.`
+            : `Ce créneau est déjà occupé (rendez-vous existant à ${ct}).`,
         });
       }
     }
 
     const createdAppointments = [];
 
-    for (const dateTime of dates) {
+    for (const appt_date of apptDates) {
       const appt = await prisma.appointment.create({
         data: {
-          dateTime: new Date(dateTime),
+          dateTime: appt_date,
           service: service || 'Soins',
           status: 'PLANIFIE',
           patientId: patientId || null,
           patientName: patientId ? null : (patientName || null),
           practitionerId: practitionerId || null,
-          durationMinutes: durationMinutes ? parseInt(durationMinutes, 10) : 30,
+          durationMinutes: duration,
         }
       });
       createdAppointments.push(appt);
