@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { prisma } from '../config/prisma';
 import { UserRole } from '@prisma/client';
+import { sendReminderEmails } from '../services/reminder.service';
 
 export async function createUser(req: Request, res: Response) {
   try {
@@ -282,5 +283,15 @@ export async function getActivityLogs(req: Request, res: Response) {
   } catch (error) {
     console.error('Erreur getActivityLogs:', error);
     return res.status(500).json({ error: 'Erreur lors de la récupération des logs d\'activité.' });
+  }
+}
+
+export async function triggerReminders(_req: Request, res: Response) {
+  try {
+    const result = await sendReminderEmails();
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error('Erreur déclenchement rappels:', error);
+    return res.status(500).json({ error: error.message ?? 'Erreur lors de l\'envoi des rappels.' });
   }
 }

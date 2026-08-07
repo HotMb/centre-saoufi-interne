@@ -12,15 +12,16 @@ function buildTransporter() {
   });
 }
 
-async function sendReminderEmails() {
+export async function sendReminderEmails(): Promise<{ sent: boolean; reason: string }> {
   const recipients = env.REMINDER_EMAILS
     .split(',')
     .map(e => e.trim())
     .filter(Boolean);
 
   if (recipients.length === 0 || !env.SMTP_USER || !env.SMTP_PASS) {
-    console.log('[Rappels] SMTP ou destinataires non configurés — rappels ignorés.');
-    return;
+    const msg = '[Rappels] SMTP ou destinataires non configurés — rappels ignorés.';
+    console.log(msg);
+    return { sent: false, reason: 'SMTP ou REMINDER_EMAILS non configurés.' };
   }
 
   const tomorrow = new Date();
@@ -29,7 +30,7 @@ async function sendReminderEmails() {
   // Pas d'envoi le dimanche (RDV du lundi seront envoyés le samedi)
   if (tomorrow.getDay() === 0) {
     console.log('[Rappels] Demain est dimanche — aucun rappel envoyé.');
-    return;
+    return { sent: false, reason: 'Demain est dimanche — centre fermé.' };
   }
 
   const dayStart = new Date(tomorrow);
@@ -51,7 +52,7 @@ async function sendReminderEmails() {
 
   if (appointments.length === 0) {
     console.log('[Rappels] Aucun RDV planifié demain.');
-    return;
+    return { sent: false, reason: 'Aucun rendez-vous PLANIFIÉ pour demain.' };
   }
 
   const dateLabel = tomorrow.toLocaleDateString('fr-FR', {
@@ -116,6 +117,8 @@ async function sendReminderEmails() {
       details: `Rappel J-1 envoyé à ${recipients.join(', ')} — ${appointments.length} RDV pour le ${dateLabel}.`,
     },
   });
+
+  return { sent: true, reason: `Email envoyé à ${recipients.join(', ')} — ${appointments.length} RDV pour le ${dateLabel}.` };
 }
 
 export function startReminderCron() {

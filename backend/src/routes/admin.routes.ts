@@ -10,6 +10,7 @@ import {
   resetUserPassword,
   getActivityLogs,
   getStats,
+  triggerReminders,
 } from '../controllers/admin.controller';
 
 const router = express.Router();
@@ -30,5 +31,8 @@ router.get('/stats', getStats);
 
 // Route du journal d'activité
 router.get('/logs', getActivityLogs);
+
+// Déclenchement manuel des rappels email (test / rattrapage)
+router.post('/trigger-reminders', triggerReminders);
 
 export default router;
