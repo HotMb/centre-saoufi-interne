@@ -5,7 +5,7 @@ import { Alert } from '../components/Alert';
 import { generateDevisPDF } from '../utils/devisGenerator';
 import { Patient, Practitioner } from '../types';
 import { SERVICES } from '../constants';
-import { checkHoursWarning } from '../utils/helpers';
+import { checkHoursWarning, getValidTimeSlots } from '../utils/helpers';
 
 export function DevisTab() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -49,15 +49,30 @@ export function DevisTab() {
   const today = new Date().toISOString().split('T')[0];
   const addSeance = () => setSeances(s => {
     const last = s[s.length - 1];
-    return [...s, { date: last?.date ?? today, heure: last?.heure ?? '09:00' }];
+    const slots = getValidTimeSlots(last?.date ?? today);
+    return [...s, { date: last?.date ?? today, heure: slots[0] ?? '09:30' }];
   });
   const removeSeance = (i: number) => setSeances(s => s.filter((_, idx) => idx !== i));
   const updateSeance = (i: number, field: 'date' | 'heure', val: string) =>
-    setSeances(s => s.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
+    setSeances(s => s.map((row, idx) => {
+      if (idx !== i) return row;
+      const updated = { ...row, [field]: val };
+      if (field === 'date') {
+        const slots = getValidTimeSlots(val);
+        if (slots.length > 0 && !slots.includes(updated.heure)) updated.heure = slots[0];
+      }
+      return updated;
+    }));
 
   const handleGenerate = () => {
     if (!patientFullName.trim()) { setError('Veuillez renseigner le nom du patient.'); return; }
     if (seances.length === 0) { setError('Ajoutez au moins une séance.'); return; }
+    const horsHoraires = seances.filter(s => checkHoursWarning(s.date, s.heure) !== null);
+    if (horsHoraires.length > 0) {
+      const msgs = [...new Set(horsHoraires.map(s => checkHoursWarning(s.date, s.heure)))];
+      setError(`${horsHoraires.length} séance(s) hors horaires d'ouverture : ${msgs.join(' · ')}. Corrigez avant de générer.`);
+      return;
+    }
     setError(null);
     try {
       generateDevisPDF({
@@ -77,6 +92,12 @@ export function DevisTab() {
   const handleConfirmRdv = async () => {
     if (!selectedPatientId && !patientFullName.trim()) { setError('Veuillez renseigner le nom du patient avant de créer les rendez-vous.'); return; }
     if (seances.length === 0) { setError('Ajoutez au moins une séance.'); return; }
+    const horsHoraires = seances.filter(s => checkHoursWarning(s.date, s.heure) !== null);
+    if (horsHoraires.length > 0) {
+      const msgs = [...new Set(horsHoraires.map(s => checkHoursWarning(s.date, s.heure)))];
+      setError(`${horsHoraires.length} séance(s) hors horaires d'ouverture : ${msgs.join(' · ')}. Corrigez avant de confirmer.`);
+      return;
+    }
     setIsConfirming(true); setError(null); setConfirmSuccess(null);
     try {
       const dates = seances.map(s => new Date(`${s.date}T${s.heure}:00`).toISOString());
@@ -197,13 +218,15 @@ export function DevisTab() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto', gap: '10px', alignItems: 'center', padding: '10px 14px', background: 'var(--color-bg-global)', borderRadius: 'var(--radius-sm)', border: `1px solid ${warn ? '#f59e0b' : 'var(--color-border)'}` }}>
                       <span style={{ fontWeight: 700, color: 'var(--color-text-sub)', fontSize: '0.82rem', minWidth: '24px' }}>#{i + 1}</span>
                       <input type="date" value={s.date} min={today} onChange={e => updateSeance(i, 'date', e.target.value)} />
-                      <select value={s.heure} onChange={e => updateSeance(i, 'heure', e.target.value)}>
-                        {Array.from({ length: 22 }, (_, j) => {
-                          const h = Math.floor(j / 2) + 8;
-                          const m = j % 2 === 0 ? '00' : '30';
-                          return `${String(h).padStart(2, '0')}:${m}`;
-                        }).map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                      {getValidTimeSlots(s.date).length === 0 ? (
+                        <div style={{ padding: '8px 12px', color: 'var(--color-error)', fontSize: '0.82rem', background: '#fff1f2', borderRadius: 'var(--radius-sm)', border: '1px solid #fecdd3' }}>
+                          Fermé ce jour
+                        </div>
+                      ) : (
+                        <select value={s.heure} onChange={e => updateSeance(i, 'heure', e.target.value)}>
+                          {getValidTimeSlots(s.date).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      )}
                       {seances.length > 1 && (
                         <button type="button" onClick={() => removeSeance(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', padding: '4px', display: 'flex' }}>
                           <Minus size={16} />
@@ -211,8 +234,8 @@ export function DevisTab() {
                       )}
                     </div>
                     {warn && (
-                      <span style={{ fontSize: '0.73rem', color: '#f59e0b', paddingLeft: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        ⚠ {warn} — incluse dans le devis mais hors planning standard
+                      <span style={{ fontSize: '0.73rem', color: 'var(--color-error)', paddingLeft: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        ⚠ {warn} — corrigez cet horaire avant de valider
                       </span>
                     )}
                   </div>
@@ -291,7 +314,7 @@ export function DevisTab() {
               </div>
             </div>
             <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'var(--color-text-sub)', lineHeight: 1.4 }}>
-              Les séances hors horaires sont permises dans un devis. Un avertissement apparaît sur chaque séance concernée.
+              Seuls les créneaux dans les horaires d'ouverture sont disponibles. La génération du PDF et la création des RDV sont bloquées si une séance est hors horaires.
             </p>
           </div>
         </div>

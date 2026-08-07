@@ -62,6 +62,25 @@ export function exportToICS(appointments: Appointment[]) {
   URL.revokeObjectURL(url);
 }
 
+export function getValidTimeSlots(dateStr: string): string[] {
+  if (!dateStr) return [];
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDay();
+  if (day === 0) return [];
+  const all: string[] = [];
+  for (let h = 8; h <= 18; h++) {
+    all.push(`${String(h).padStart(2, '0')}:00`);
+    all.push(`${String(h).padStart(2, '0')}:30`);
+  }
+  return all.filter(t => {
+    const [hh, mm] = t.split(':').map(Number);
+    const time = hh + mm / 60;
+    if (day >= 1 && day <= 5) return (time >= 9.5 && time <= 12.5) || (time >= 15.5 && time <= 18.5);
+    if (day === 6) return time >= 9.0 && time <= 14.0;
+    return false;
+  });
+}
+
 export function checkHoursWarning(date: string, heure: string): string | null {
   if (!date || !heure) return null;
   const d = new Date(`${date}T${heure}:00`);

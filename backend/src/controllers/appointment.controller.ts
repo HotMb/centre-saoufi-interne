@@ -392,6 +392,23 @@ export async function createBulkAppointments(req: Request, res: Response) {
       }
     }
 
+    // Valider toutes les dates avant de créer quoi que ce soit
+    for (const dateTime of dates) {
+      const appt_date = new Date(dateTime);
+      if (isNaN(appt_date.getTime())) {
+        return res.status(400).json({ error: `Format de date invalide : ${dateTime}` });
+      }
+      if (appt_date.getTime() < Date.now() - 5 * 60 * 1000) {
+        return res.status(400).json({ error: 'Impossible de créer un rendez-vous dans le passé.' });
+      }
+      const hoursCheck = isWithinOpeningHours(appt_date);
+      if (!hoursCheck.valid) {
+        return res.status(400).json({
+          error: `Créneau hors horaires (${appt_date.toLocaleString('fr-FR')}) : ${hoursCheck.reason}`,
+        });
+      }
+    }
+
     const createdAppointments = [];
 
     for (const dateTime of dates) {

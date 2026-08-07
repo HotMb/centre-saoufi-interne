@@ -7,7 +7,7 @@ import { Alert } from '../components/Alert';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { User, Appointment, Patient, Practitioner } from '../types';
 import { SERVICES, STATUS_LABELS } from '../constants';
-import { getStartOfWeek, exportToICS, formatDate } from '../utils/helpers';
+import { getStartOfWeek, exportToICS, formatDate, getValidTimeSlots, checkHoursWarning } from '../utils/helpers';
 
 export function AppointmentsTab({ currentUser }: { currentUser: User }) {
   const canWrite = currentUser.role === 'ADMIN' || currentUser.role === 'SECRETAIRE';
@@ -96,6 +96,9 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
     e.preventDefault();
     if (fPatientId === 'LIBRE' && !fPatientName.trim()) { setError('Veuillez entrer le nom du patient.'); return; }
     if (!fPatientId && !fPatientName) { setError('Veuillez sélectionner ou entrer un patient.'); return; }
+    if (isSundaySelected) { setError('Le centre est fermé le dimanche. Veuillez choisir un autre jour.'); return; }
+    const slotWarn = checkHoursWarning(fDate, fTime);
+    if (slotWarn) { setError(slotWarn); return; }
     setIsSubmitting(true); setError(null);
     try {
       const dateTime = new Date(`${fDate}T${fTime}:00`).toISOString();
@@ -146,11 +149,8 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
 
   const hours = Array.from({ length: 11 }, (_, i) => i + 8);
 
-  const timeSlots: string[] = [];
-  for (let h = 8; h <= 18; h++) {
-    timeSlots.push(`${String(h).padStart(2, '0')}:00`);
-    timeSlots.push(`${String(h).padStart(2, '0')}:30`);
-  }
+  const validSlotsForDate = getValidTimeSlots(fDate);
+  const isSundaySelected = fDate ? new Date(`${fDate}T00:00:00`).getDay() === 0 : false;
 
   const displayedAppts = calSearch
     ? appointments.filter(a => {
@@ -171,8 +171,11 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
     const todayStr = new Date().toISOString().split('T')[0];
     const clickDateStr = dateObj.toISOString().split('T')[0];
     if (clickDateStr < todayStr) { setError('Impossible de créer un rendez-vous dans le passé.'); return; }
+    if (dateObj.getDay() === 0) { setError('Le centre est fermé le dimanche.'); return; }
+    const slots = getValidTimeSlots(clickDateStr);
+    const selectedTime = slots.includes(hourStr) ? hourStr : (slots[0] ?? '09:30');
     setFDate(clickDateStr);
-    setFTime(hourStr);
+    setFTime(selectedTime);
     if (filterPractitionerId) setFPractitionerId(filterPractitionerId);
     setShowForm(true); setError(null);
   };
@@ -252,13 +255,35 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
                   </div>
                   <div className="form-field">
                     <label>Date <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <input type="date" value={fDate} onChange={e => setFDate(e.target.value)} required min={new Date().toISOString().split('T')[0]} />
+                    <input
+                      type="date"
+                      value={fDate}
+                      onChange={e => {
+                        const newDate = e.target.value;
+                        setFDate(newDate);
+                        const slots = getValidTimeSlots(newDate);
+                        if (slots.length > 0 && !slots.includes(fTime)) setFTime(slots[0]);
+                      }}
+                      required
+                      min={new Date().toISOString().split('T')[0]}
+                    />
+                    {isSundaySelected && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-error)', marginTop: '4px', display: 'block' }}>
+                        Le centre est fermé le dimanche.
+                      </span>
+                    )}
                   </div>
                   <div className="form-field">
                     <label>Heure de début <span style={{ color: 'var(--color-error)' }}>*</span></label>
-                    <select value={fTime} onChange={e => setFTime(e.target.value)} required>
-                      {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    {isSundaySelected ? (
+                      <div style={{ padding: '8px 12px', color: 'var(--color-error)', fontSize: '0.85rem', background: '#fff1f2', borderRadius: 'var(--radius-sm)', border: '1px solid #fecdd3' }}>
+                        Fermé
+                      </div>
+                    ) : (
+                      <select value={fTime} onChange={e => setFTime(e.target.value)} required>
+                        {validSlotsForDate.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    )}
                   </div>
                   <div className="form-field">
                     <label>Durée <span style={{ color: 'var(--color-error)' }}>*</span></label>
@@ -283,7 +308,7 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
                 </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border)', paddingTop: '18px' }}>
                   <button type="button" onClick={() => setShowForm(false)} className="btn btn-secondary">Annuler</button>
-                  <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                  <button type="submit" className="btn btn-primary" disabled={isSubmitting || isSundaySelected}>
                     {isSubmitting ? 'Création...' : 'Confirmer le RDV'}
                   </button>
                 </div>
