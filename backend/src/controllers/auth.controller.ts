@@ -49,7 +49,9 @@ export async function login(req: Request, res: Response) {
       },
     });
 
-    return res.status(200).json({
+    // Forcer la sauvegarde de la session avant d'envoyer la réponse
+    // (évite la race condition avec le store PostgreSQL asynchrone)
+    const responsePayload = {
       message: 'Connexion réussie.',
       user: {
         id: user.id,
@@ -58,6 +60,14 @@ export async function login(req: Request, res: Response) {
         role: user.role,
         patientId: user.patientId,
       },
+    };
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('Erreur sauvegarde session:', err);
+        return res.status(500).json({ error: 'Une erreur interne est survenue lors de la connexion.' });
+      }
+      return res.status(200).json(responsePayload);
     });
   } catch (error) {
     console.error('Erreur login:', error);
