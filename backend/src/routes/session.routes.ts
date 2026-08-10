@@ -1,6 +1,8 @@
 import express from 'express';
 import { requireAuth } from '../middleware/requireAuth';
 import { requireRoles } from '../middleware/rbac';
+import { validate } from '../middleware/validate';
+import { SessionSchema } from '../validation/schemas';
 import { UserRole } from '@prisma/client';
 import {
   listSessions,
@@ -22,7 +24,7 @@ router.get('/', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE, UserRole.PRATI
 router.get('/:id', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE, UserRole.PRATICIEN, UserRole.PATIENT), getSession);
 
 // Création : PRATICIEN (auteur automatique) et ADMIN (peut choisir le praticien)
-router.post('/', requireRoles(UserRole.PRATICIEN, UserRole.ADMIN), createSession);
+router.post('/', requireRoles(UserRole.PRATICIEN, UserRole.ADMIN), validate(SessionSchema), createSession);
 
 // Modification : PRATICIEN (la sienne) et ADMIN
 router.patch('/:id', requireRoles(UserRole.ADMIN, UserRole.PRATICIEN), updateSession);

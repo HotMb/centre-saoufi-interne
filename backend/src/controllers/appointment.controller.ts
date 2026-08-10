@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
+import { isWithinOpeningHours } from '../utils/openingHours';
 
 // Services disponibles au Centre Saoufi
 export const SERVICES_DISPONIBLES = [
@@ -14,40 +15,6 @@ export const SERVICES_DISPONIBLES = [
 
 // Statuts valides
 const STATUTS_VALIDES = ['PLANIFIE', 'ANNULE', 'REPORTE', 'REALISE'];
-
-// Fonction de validation des horaires
-function isWithinOpeningHours(date: Date): { valid: boolean; reason?: string } {
-  // Les timestamps sont stockés en UTC par Prisma.
-  // Africa/Casablanca = UTC+1 permanent depuis le 28 octobre 2018 (pas de DST).
-  const casablanca = new Date(date.getTime() + 60 * 60 * 1000);
-  const day = casablanca.getUTCDay();     // 0 = Dimanche, ..., 6 = Samedi
-  const hours = casablanca.getUTCHours();
-  const minutes = casablanca.getUTCMinutes();
-  const time = hours + minutes / 60;      // Ex: 9h30 -> 9.5
-
-  if (day === 0) {
-    return { valid: false, reason: "Le centre est fermé le dimanche." };
-  }
-
-  if (day >= 1 && day <= 5) {
-    // Lundi - Vendredi: 09:30-13:30 et 15:30-19:30
-    // Dernier créneau 1h avant fermeture => matin max 12:30, aprem max 18:30
-    const isMatin = time >= 9.5 && time <= 12.5;
-    const isAprem = time >= 15.5 && time <= 18.5;
-    if (!isMatin && !isAprem) {
-      return { valid: false, reason: "Horaires en semaine : 09:30-12:30 et 15:30-18:30 (dernier créneau 1h avant la fermeture)." };
-    }
-  }
-
-  if (day === 6) {
-    // Samedi: 09:00-15:00 — dernier créneau 1h avant => max 14:00
-    if (time < 9.0 || time > 14.0) {
-      return { valid: false, reason: "Horaires le samedi : 09:00-14:00 (dernier créneau 1h avant la fermeture)." };
-    }
-  }
-
-  return { valid: true };
-}
 
 // ─────────────────────────────────────────────
 // GET /api/appointments — Liste des rendez-vous

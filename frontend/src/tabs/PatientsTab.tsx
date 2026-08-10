@@ -247,6 +247,7 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<{ total: number; totalPages: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -256,11 +257,14 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
   const canWrite = currentUser.role === 'ADMIN' || currentUser.role === 'SECRETAIRE';
   const canDelete = currentUser.role === 'ADMIN';
 
-  const fetchPatients = useCallback(async (q?: string) => {
+  const fetchPatients = useCallback(async (q?: string, p = 1) => {
     setIsLoading(true); setError(null);
     try {
-      const url = q ? `/api/patients?search=${encodeURIComponent(q)}` : '/api/patients';
-      setPatients(await api.get(url));
+      let url = `/api/patients?page=${p}&limit=20`;
+      if (q) url += `&search=${encodeURIComponent(q)}`;
+      const res = await api.get(url);
+      setPatients(res.data);
+      setMeta({ total: res.meta.total, totalPages: res.meta.totalPages });
     } catch (err: any) {
       setError(err.message ?? 'Impossible de charger les patients.');
     } finally { setIsLoading(false); }
@@ -302,14 +306,15 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
       try {
         const result = await api.post('/api/patients/bulk-import', { patients: rows });
         setCsvResult(result);
-        fetchPatients(search);
+        setPage(1); fetchPatients(search, 1);
       } catch (err: any) { setError(err.message ?? "Erreur lors de l'import."); }
       finally { setIsLoading(false); }
     };
     reader.readAsText(file, 'UTF-8');
   };
 
-  useEffect(() => { if (view === 'list') fetchPatients(search); }, [view]);
+  useEffect(() => { if (view === 'list') { setPage(1); fetchPatients(search, 1); } }, [view]);
+  useEffect(() => { if (view === 'list') fetchPatients(search, page); }, [page]);
 
   const openDetail = async (id: string) => {
     setError(null); setIsLoading(true);
@@ -356,9 +361,8 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
   };
 
   if (view === 'list') {
-    const PAGE_SIZE = 20;
-    const totalPages = Math.ceil(patients.length / PAGE_SIZE);
-    const paginated = patients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const totalPages = meta?.totalPages ?? 1;
+    const paginated = patients; // découpage côté serveur
 
     return (
       <div>
@@ -386,7 +390,7 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
         {success && <Alert type="success" msg={success} onClose={() => setSuccess(null)} />}
 
         <div className="card" style={{ marginBottom: '18px' }}>
-          <form onSubmit={e => { e.preventDefault(); fetchPatients(search); }} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <form onSubmit={e => { e.preventDefault(); setPage(1); fetchPatients(search, 1); }} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: 1 }}>
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-sub)' }} />
               <input
@@ -399,7 +403,7 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
             </div>
             <button type="submit" className="btn btn-primary" style={{ padding: '10px 18px' }}>Rechercher</button>
             {search && (
-              <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); fetchPatients(); }} style={{ padding: '10px 14px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setPage(1); fetchPatients('', 1); }} style={{ padding: '10px 14px' }}>
                 <X size={15} />
               </button>
             )}
@@ -409,7 +413,7 @@ export function PatientsTab({ currentUser }: { currentUser: User }) {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h3 style={{ margin: 0, color: 'var(--color-text-sub)', fontSize: '0.85rem', fontWeight: 600 }}>
-              {isLoading ? 'Chargement...' : `${patients.length} patient(s) trouvé(s)`}
+              {isLoading ? 'Chargement...' : `${meta?.total ?? patients.length} patient(s) trouvé(s)`}
             </h3>
             {totalPages > 1 && (
               <span style={{ fontSize: '0.82rem', color: 'var(--color-text-sub)' }}>

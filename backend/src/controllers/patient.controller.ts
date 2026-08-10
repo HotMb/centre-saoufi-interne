@@ -7,31 +7,49 @@ import { prisma } from '../config/prisma';
 // ─────────────────────────────────────────────
 export async function listPatients(req: Request, res: Response) {
   try {
-    const { search } = req.query;
+    const { search, page, limit } = req.query;
 
-    const patients = await prisma.patient.findMany({
-      where: search
-        ? {
-            OR: [
-              { name: { contains: search as string, mode: 'insensitive' } },
-              { firstName: { contains: search as string, mode: 'insensitive' } },
-              { phone: { contains: search as string } },
-            ],
-          }
-        : undefined,
-      select: {
-        id: true,
-        name: true,
-        firstName: true,
-        phone: true,
-        email: true,
-        birthDate: true,
-        createdAt: true,
-      },
-      orderBy: { name: 'asc' },
+    const where = search
+      ? {
+          deletedAt: null,
+          OR: [
+            { name: { contains: search as string, mode: 'insensitive' as const } },
+            { firstName: { contains: search as string, mode: 'insensitive' as const } },
+            { phone: { contains: search as string } },
+          ],
+        }
+      : { deletedAt: null };
+
+    // Sans paramètre page → liste plate (rétrocompatibilité dropdowns)
+    if (!page) {
+      const patients = await prisma.patient.findMany({
+        where,
+        select: { id: true, name: true, firstName: true, phone: true, email: true, birthDate: true, createdAt: true },
+        orderBy: { name: 'asc' },
+      });
+      return res.status(200).json(patients);
+    }
+
+    // Avec page → réponse paginée
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt((limit as string) || '20', 10)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [data, total] = await Promise.all([
+      prisma.patient.findMany({
+        where,
+        select: { id: true, name: true, firstName: true, phone: true, email: true, birthDate: true, createdAt: true },
+        orderBy: { name: 'asc' },
+        skip,
+        take: limitNum,
+      }),
+      prisma.patient.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      data,
+      meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     });
-
-    return res.status(200).json(patients);
   } catch (error) {
     console.error('Erreur listPatients:', error);
     return res.status(500).json({ error: 'Erreur lors de la récupération des patients.' });

@@ -1,6 +1,8 @@
 import express from 'express';
 import { requireAuth } from '../middleware/requireAuth';
 import { requireRoles } from '../middleware/rbac';
+import { validate } from '../middleware/validate';
+import { PatientSchema, PatientUpdateSchema } from '../validation/schemas';
 import { UserRole } from '@prisma/client';
 import {
   listPatients,
@@ -27,8 +29,8 @@ router.get('/:id', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE, UserRole.PR
 
 // Écriture : ADMIN, SECRETAIRE
 router.post('/bulk-import', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE), bulkImportPatients);
-router.post('/', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE), createPatient);
-router.patch('/:id', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE), updatePatient);
+router.post('/', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE), validate(PatientSchema), createPatient);
+router.patch('/:id', requireRoles(UserRole.ADMIN, UserRole.SECRETAIRE), validate(PatientUpdateSchema), updatePatient);
 
 // Suppression : ADMIN uniquement (droit d'effacement CNIL)
 router.delete('/:id', requireRoles(UserRole.ADMIN), deletePatient);

@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
@@ -24,6 +25,24 @@ if (isProd) app.set('trust proxy', 1);
 
 // En-têtes de sécurité HTTP (XSS, clickjacking, MIME-sniffing…)
 app.use(helmet({ contentSecurityPolicy: false }));
+
+// Limitation du débit — protection anti-brute-force et DDoS
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, réessayez dans quelques minutes.' },
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' },
+});
+app.use('/api', apiLimiter);
+app.use('/api/auth/login', authLimiter);
 
 // CORS — uniquement nécessaire en développement (en prod, même origine)
 if (!isProd) {

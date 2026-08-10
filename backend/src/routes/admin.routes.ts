@@ -1,6 +1,8 @@
 import express from 'express';
 import { requireAuth } from '../middleware/requireAuth';
 import { requireRoles } from '../middleware/rbac';
+import { validate } from '../middleware/validate';
+import { CreateUserSchema, UpdatePasswordSchema } from '../validation/schemas';
 import { UserRole } from '@prisma/client';
 import {
   createUser,
@@ -21,10 +23,10 @@ router.use(requireRoles(UserRole.ADMIN));
 
 // Routes de gestion des comptes
 router.get('/users', listUsers);
-router.post('/users', createUser);
+router.post('/users', validate(CreateUserSchema), createUser);
 router.patch('/users/:id', updateUser);
 router.post('/users/:id/toggle', toggleUserStatus);
-router.patch('/users/:id/password', resetUserPassword);
+router.patch('/users/:id/password', validate(UpdatePasswordSchema), resetUserPassword);
 
 // Statistiques globales
 router.get('/stats', getStats);
