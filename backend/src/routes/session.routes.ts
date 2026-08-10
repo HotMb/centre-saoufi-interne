@@ -7,6 +7,7 @@ import {
   getSession,
   createSession,
   updateSession,
+  deleteSession,
   listSessionNotes,
   createSessionNote,
   deleteSessionNote,
@@ -25,6 +26,9 @@ router.post('/', requireRoles(UserRole.PRATICIEN, UserRole.ADMIN), createSession
 
 // Modification : PRATICIEN (la sienne) et ADMIN
 router.patch('/:id', requireRoles(UserRole.ADMIN, UserRole.PRATICIEN), updateSession);
+
+// Suppression : PRATICIEN (la sienne) et ADMIN
+router.delete('/:id', requireRoles(UserRole.ADMIN, UserRole.PRATICIEN), deleteSession);
 
 // Consignes — IMPORTANT : déclarer AVANT /:id pour éviter le conflit de route
 router.get('/:id/notes', requireRoles(UserRole.ADMIN, UserRole.PRATICIEN), listSessionNotes);

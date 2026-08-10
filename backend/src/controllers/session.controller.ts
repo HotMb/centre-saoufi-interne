@@ -252,6 +252,43 @@ export async function deleteSessionNote(req: Request, res: Response) {
 }
 
 // ─────────────────────────────────────────────
+// DELETE /api/sessions/:id — Supprimer une séance
+// Accès : ADMIN | PRATICIEN (uniquement la sienne)
+// ─────────────────────────────────────────────
+export async function deleteSession(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const currentUser = (req as any).user;
+
+    const session = await prisma.session.findUnique({
+      where: { id },
+      include: { patient: { select: { name: true, firstName: true } } },
+    });
+
+    if (!session) return res.status(404).json({ error: 'Séance non trouvée.' });
+
+    if (currentUser.role === 'PRATICIEN' && session.practitionerId !== currentUser.id) {
+      return res.status(403).json({ error: 'Vous ne pouvez supprimer que vos propres séances.' });
+    }
+
+    await prisma.session.delete({ where: { id } });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: currentUser.id,
+        action: 'SUPPRESSION_SEANCE',
+        details: `Séance supprimée (ID: ${id}) — Patient: ${session.patient?.firstName} ${session.patient?.name}.`,
+      },
+    });
+
+    return res.status(200).json({ message: 'Séance supprimée.' });
+  } catch (error) {
+    console.error('Erreur deleteSession:', error);
+    return res.status(500).json({ error: 'Erreur lors de la suppression de la séance.' });
+  }
+}
+
+// ─────────────────────────────────────────────
 // PATCH /api/sessions/:id — Modifier une séance
 // Accès : PRATICIEN (uniquement la sienne) | ADMIN
 // ─────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { Alert } from '../components/Alert';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { User, Appointment, Patient, Practitioner } from '../types';
 import { SERVICES, STATUS_LABELS } from '../constants';
-import { getStartOfWeek, exportToICS, formatDate, getValidTimeSlots, checkHoursWarning } from '../utils/helpers';
+import { getStartOfWeek, exportToICS, formatDate, getAvailableTimeSlots, checkHoursWarning } from '../utils/helpers';
 
 export function AppointmentsTab({ currentUser }: { currentUser: User }) {
   const canWrite = currentUser.role === 'ADMIN' || currentUser.role === 'SECRETAIRE';
@@ -149,7 +149,7 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
 
   const hours = Array.from({ length: 11 }, (_, i) => i + 8);
 
-  const validSlotsForDate = getValidTimeSlots(fDate);
+  const validSlotsForDate = getAvailableTimeSlots(fDate);
   const isSundaySelected = fDate ? new Date(`${fDate}T00:00:00`).getDay() === 0 : false;
 
   const displayedAppts = calSearch
@@ -172,7 +172,7 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
     const clickDateStr = dateObj.toISOString().split('T')[0];
     if (clickDateStr < todayStr) { setError('Impossible de créer un rendez-vous dans le passé.'); return; }
     if (dateObj.getDay() === 0) { setError('Le centre est fermé le dimanche.'); return; }
-    const slots = getValidTimeSlots(clickDateStr);
+    const slots = getAvailableTimeSlots(clickDateStr);
     const selectedTime = slots.includes(hourStr) ? hourStr : (slots[0] ?? '09:30');
     setFDate(clickDateStr);
     setFTime(selectedTime);
@@ -207,7 +207,11 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
             <Printer size={16} /> <span className="hide-mobile">PDF</span>
           </button>
           {(canWrite || isPractitioner) && (
-            <button onClick={() => { setShowForm(true); setError(null); }} className="btn btn-primary">
+            <button onClick={() => {
+              const slots = getAvailableTimeSlots(fDate);
+              if (slots.length > 0 && !slots.includes(fTime)) setFTime(slots[0]);
+              setShowForm(true); setError(null);
+            }} className="btn btn-primary">
               <Plus size={17} /> <span className="hide-mobile">Nouveau RDV</span>
             </button>
           )}
@@ -261,7 +265,7 @@ export function AppointmentsTab({ currentUser }: { currentUser: User }) {
                       onChange={e => {
                         const newDate = e.target.value;
                         setFDate(newDate);
-                        const slots = getValidTimeSlots(newDate);
+                        const slots = getAvailableTimeSlots(newDate);
                         if (slots.length > 0 && !slots.includes(fTime)) setFTime(slots[0]);
                       }}
                       required

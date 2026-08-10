@@ -81,6 +81,22 @@ export function getValidTimeSlots(dateStr: string): string[] {
   });
 }
 
+export function getAvailableTimeSlots(dateStr: string): string[] {
+  const slots = getValidTimeSlots(dateStr);
+  const now = new Date();
+  const localDateStr = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+  if (dateStr !== localDateStr) return slots;
+  const nowTime = now.getHours() + now.getMinutes() / 60;
+  return slots.filter(t => {
+    const [h, m] = t.split(':').map(Number);
+    return h + m / 60 > nowTime;
+  });
+}
+
 export function checkHoursWarning(date: string, heure: string): string | null {
   if (!date || !heure) return null;
   const d = new Date(`${date}T${heure}:00`);
