@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
+import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
@@ -20,6 +21,9 @@ const isProd = env.NODE_ENV === 'production';
 
 // Railway / Render terminent le TLS au niveau du proxy — obligatoire pour les cookies secure
 if (isProd) app.set('trust proxy', 1);
+
+// En-têtes de sécurité HTTP (XSS, clickjacking, MIME-sniffing…)
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // CORS — uniquement nécessaire en développement (en prod, même origine)
 if (!isProd) {
