@@ -122,7 +122,10 @@ export async function sendReminderEmails(): Promise<{ sent: boolean; reason: str
 }
 
 export function startReminderCron() {
-  if (!env.REMINDER_EMAILS) return;
+  if (!env.REMINDER_EMAILS) {
+    console.warn('[Rappels] REMINDER_EMAILS non défini — cron désactivé. Aucun rappel ne sera envoyé.');
+    return;
+  }
 
   // Tous les jours à 19h00
   cron.schedule('00 19 * * *', async () => {

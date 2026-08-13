@@ -1,9 +1,22 @@
 export const SERVICES = [
-  'Rééducation fonctionnelle',
+  // Kinésithérapie
+  'Kinésithérapie motrice',
   'Kinésithérapie respiratoire',
-  'Massage thérapeutique',
-  'Ondes de choc',
-  'Pressothérapie',
+  'Kinésithérapie neurologique',
+  'Kinésithérapie périnéale',
+  'Kinésithérapie maxillo-faciale',
+  // Hijjama / Cupping
+  'Hijjama médicale',
+  'Hijjama nabawiyya',
+  'Hijjama sportive',
+  // Soins visage
+  'Soin visage basique',
+  'Soin visage profond',
+  'Soin visage hydratation',
+  'Microneedling',
+  'Dermabrasion à pointe de diamant',
+  // Beauté
+  'Lifting colombien',
 ] as const;
 
 export const STATUS_LABELS: Record<string, { label: string; color: string }> = {
