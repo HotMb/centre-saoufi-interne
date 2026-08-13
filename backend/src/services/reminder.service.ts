@@ -1,16 +1,7 @@
 import cron from 'node-cron';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { prisma } from '../config/prisma';
 import { env } from '../config/env';
-
-function buildTransporter() {
-  return nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: env.SMTP_PORT === 465,
-    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-  });
-}
 
 export async function sendReminderEmails(): Promise<{ sent: boolean; reason: string }> {
   const recipients = env.REMINDER_EMAILS
@@ -18,10 +9,10 @@ export async function sendReminderEmails(): Promise<{ sent: boolean; reason: str
     .map(e => e.trim())
     .filter(Boolean);
 
-  if (recipients.length === 0 || !env.SMTP_USER || !env.SMTP_PASS) {
-    const msg = '[Rappels] SMTP ou destinataires non configurés — rappels ignorés.';
+  if (recipients.length === 0 || !env.RESEND_API_KEY) {
+    const msg = '[Rappels] RESEND_API_KEY ou REMINDER_EMAILS non configurés — rappels ignorés.';
     console.log(msg);
-    return { sent: false, reason: 'SMTP ou REMINDER_EMAILS non configurés.' };
+    return { sent: false, reason: 'RESEND_API_KEY ou REMINDER_EMAILS non configurés.' };
   }
 
   const tomorrow = new Date();
@@ -101,13 +92,17 @@ export async function sendReminderEmails(): Promise<{ sent: boolean; reason: str
       </div>
     </div>`;
 
-  const transporter = buildTransporter();
-  await transporter.sendMail({
-    from: `"Centre Saoufi" <${env.SMTP_USER}>`,
-    to: recipients.join(', '),
+  const resend = new Resend(env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from: 'Centre Saoufi <onboarding@resend.dev>',
+    to: recipients,
     subject: `[Centre Saoufi] ${appointments.length} RDV demain — ${dateLabel}`,
     html,
   });
+
+  if (error) {
+    throw new Error(`Resend error: ${error.message}`);
+  }
 
   console.log(`[Rappels] Email envoyé à ${recipients.join(', ')} — ${appointments.length} RDV pour demain.`);
 
@@ -131,9 +126,11 @@ export function startReminderCron() {
   cron.schedule('00 19 * * *', async () => {
     console.log('[Rappels] Déclenchement du cron rappel J-1...');
     try {
-      await sendReminderEmails();
-    } catch (err) {
-      console.error('[Rappels] Erreur lors de l\'envoi des rappels:', err);
+      const result = await sendReminderEmails();
+      console.log('[Rappels] Résultat:', JSON.stringify(result));
+    } catch (err: any) {
+      console.error('[Rappels] ÉCHEC envoi rappels — code:', err?.code, '— message:', err?.message);
+      console.error('[Rappels] Détail complet:', err);
     }
   }, { timezone: 'Africa/Casablanca' });
 

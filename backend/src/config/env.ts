@@ -12,6 +12,8 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   // Notifications email
   REMINDER_EMAILS: process.env.REMINDER_EMAILS || '',
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  // SMTP conservé pour compatibilité mais non utilisé si RESEND_API_KEY est défini
   SMTP_HOST: process.env.SMTP_HOST || 'smtp.gmail.com',
   SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
   SMTP_USER: process.env.SMTP_USER || '',
